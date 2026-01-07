@@ -1,4 +1,4 @@
-# 🔌 Power Flow Margin Optimization (Synthetic)
+# 🔌 Power Flow Margin Optimization
 
 This repository implements a **Mixed-Integer Linear Programming (MILP)** model for **max–min thermal margin optimization** in a transmission network using **linear sensitivity factors**.
 

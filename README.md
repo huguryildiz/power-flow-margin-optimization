@@ -1,144 +1,168 @@
-# Synthetic Flow Margin Optimization
+# 🔌 Power Flow Margin Optimization (Synthetic)
 
-This repository provides a **fully synthetic** mixed-integer linear programming (MILP) model
-for **maximizing the minimum thermal margin** across a set of critical network elements (lines).
+This repository implements a **Mixed-Integer Linear Programming (MILP)** model for **max–min thermal margin optimization** in a transmission network using **linear sensitivity factors**.
 
-It also includes a small plotting utility that produces interview-friendly figures:
+The project is designed to be:
+- cleanly structured  
+- easy to reproduce  
+- suitable for GitHub portfolios  
+
+It also includes plotting utilities to compare:
 - Base vs Optimized **margins**
-- Base vs Optimized **|flow| vs limit**
-- Base vs Optimized **control actions** (taps and generator outputs)
+- Base vs Optimized **|flow| vs thermal limits**
+- Base vs Optimized **control actions** (PST taps and generator outputs)
 
 ---
 
-## 1) Problem Description
+## 📁 Repository Structure
 
-A transmission operator monitors several **critical network elements (CNEs)** that must stay within thermal limits.
+```text
+power-flow-margin-optimization/
+|
+|-- solve_pulp.py              # Main optimization model (MILP, PuLP + CBC)
+|-- plot_results.py            # Plot generation (base vs optimized comparisons)
+|-- data.py                    # Fully synthetic dataset (lines, PSTs, generators, sensitivities)
+|
+|-- requirements.txt
+|-- README.md
+|
+|-- results/                   # Generated plots (after running plot_results.py)
+    |-- margins_base_vs_opt.png
+    |-- absflow_vs_limit.png
+    |-- controls_taps.png
+    |-- controls_gens.png
+```
+
+---
+
+## 🧾 Problem Description
+
+A transmission operator monitors a set of **critical network elements (lines)** that must remain within their **thermal limits**.
+
 The operator can influence line flows using:
+- **Phase-Shifting Transformers (PSTs)** with **integer tap positions**
+- **Generator redispatch** with minimum/maximum output bounds
 
-1) **Phase-shifting devices** with **discrete (integer) tap positions**, and  
-2) **Generator redispatch**, where generator outputs can change within min/max limits.
+The goal is to improve system security by maximizing the **worst (minimum) thermal margin** across all monitored lines.
 
-The goal is to make the *whole system safer* by improving the **weakest** line.
-Therefore, we maximize the **minimum thermal margin** over all monitored lines.
-
-Thermal margin of line ℓ:
-\[
-\text{margin}_\ell = F^{max}_\ell - |F_\ell|
-\]
+> Thermal margin of a line ℓ (for all ℓ ∈ ℒ):  
+> **margin_ℓ = F_ℓ^max − |F_ℓ|**
 
 ---
 
-## 2) Sets / Indices
+## 📊 Synthetic Input Data
 
-- Lines: \(\mathcal{L}\) (CNEs), indexed by \(\ell\)
-- Phase shifters: \(\mathcal{P}\), indexed by \(p\)
-- Generators: \(\mathcal{G}\), indexed by \(g\)
+All data in this repo is **synthetic** and fully editable in `data.py`.
 
----
+### Line data
+- **F_ℓ^max** : thermal limit of line ℓ (MW), ∀ ℓ ∈ ℒ  
+- **F_ℓ^ref** : reference flow before control (MW), ∀ ℓ ∈ ℒ  
 
-## 3) Parameters
+### PST data
+- **t_p^init** : initial tap position of PST p (integer), ∀ p ∈ 𝓟  
+- **R_p** : available tap range of PST p, taps allowed in [−R_p, +R_p], ∀ p ∈ 𝓟  
+- **PSDF_{ℓ,p}** : MW change on line ℓ per +1 tap on PST p, ∀ ℓ ∈ ℒ, p ∈ 𝓟  
 
-For each line \(\ell\in\mathcal{L}\):
-- \(F^{max}_\ell\) : thermal limit (MW)
-- \(F^{ref}_\ell\) : reference flow before control (MW)
-
-For each phase shifter \(p\in\mathcal{P}\):
-- \(t^{init}_p\) : initial tap position (integer)
-- \(R_p\) : tap range, taps allowed in \([-R_p, +R_p]\) (integer)
-- \(PSDF_{\ell,p}\) : flow sensitivity (MW per tap)
-
-For each generator \(g\in\mathcal{G}\):
-- \(G^{init}_g\) : initial output (MW)
-- \(G^{min}_g, G^{max}_g\) : output limits (MW)
-- \(PTDF_{\ell,g}\) : flow sensitivity (MW per +1 MW generation)
-
-**Coupling constraints (operational links):**
-- Some phase shifters must share the same tap position.
-
-**Power balance (lossless approximation):**
-\[
-\sum_{g\in\mathcal{G}} (G_g - G^{init}_g) = 0
-\]
+### Generator data
+- **G_g^init** : initial output of generator g (MW), ∀ g ∈ 𝓖  
+- **G_g^min , G_g^max** : output bounds of generator g (MW), ∀ g ∈ 𝓖  
+- **PTDF_{ℓ,g}** : MW change on line ℓ per +1 MW redispatch of generator g, ∀ ℓ ∈ ℒ, g ∈ 𝓖  
 
 ---
 
-## 4) Decision Variables
+## 🧮 Optimization Model
 
-- \(t_p\in\mathbb{Z}\): tap position of phase shifter \(p\)
-- \(G_g\in\mathbb{R}\): final generator output (MW)
-- \(m\ge 0\): minimum margin across all lines (MW)
-
----
-
-## 5) Flow Model (Linear Sensitivity Approximation)
-
-Final flow on line \(\ell\):
-\[
-F_\ell =
-F^{ref}_\ell
-+ \sum_{p\in\mathcal{P}} PSDF_{\ell,p}(t_p - t^{init}_p)
-+ \sum_{g\in\mathcal{G}} PTDF_{\ell,g}(G_g - G^{init}_g)
-\]
+### Sets
+- **ℒ** : set of monitored lines, indexed by ℓ  
+- **𝓟** : set of PSTs, indexed by p  
+- **𝓖** : set of generators, indexed by g  
 
 ---
 
-## 6) Objective (Max–Min Margin)
+### Decision Variables
+- **t_p ∈ ℤ**  
+  Tap position of PST p, ∀ p ∈ 𝓟  
 
-\[
-\max\; m
-\]
+- **G_g ∈ ℝ**  
+  Output power of generator g (MW), ∀ g ∈ 𝓖  
 
----
-
-## 7) Constraints
-
-### 7.1 Tap bounds
-\[
--R_p \le t_p \le R_p \quad \forall p\in\mathcal{P}
-\]
-
-### 7.2 Generator bounds
-\[
-G^{min}_g \le G_g \le G^{max}_g \quad \forall g\in\mathcal{G}
-\]
-
-### 7.3 Coupled taps (example)
-\[
-t_{P1} = t_{P2}, \quad t_{P3} = t_{P4}
-\]
-
-### 7.4 Power balance
-\[
-\sum_{g\in\mathcal{G}} (G_g - G^{init}_g) = 0
-\]
-
-### 7.5 Thermal safety via absolute-value linearization
-We require:
-\[
-|F_\ell| \le F^{max}_\ell - m \quad \forall \ell\in\mathcal{L}
-\]
-
-Linearization:
-\[
-F_\ell \le F^{max}_\ell - m
-\]
-\[
--F_\ell \le F^{max}_\ell - m
-\]
+- **m ≥ 0**  
+  Minimum thermal margin across all lines (MW)  
 
 ---
 
-## 8) Run
+## 🔁 Flow Model (Linear Sensitivity Approximation)
+
+Final power flow on line ℓ is computed as:
+
+```
+F_ℓ = F_ℓ^ref
+    + Σ_{p∈𝓟} PSDF_{ℓ,p} · (t_p − t_p^init)
+    + Σ_{g∈𝓖} PTDF_{ℓ,g} · (G_g − G_g^init)      ∀ ℓ ∈ ℒ
+```
+
+---
+
+## 🎯 Objective Function
+
+Maximize the worst-case (minimum) margin across all lines:
+
+```
+maximize   m
+```
+
+---
+
+## 📐 Constraints
+
+### 1️⃣ PST Tap Bounds
+```
+−R_p ≤ t_p ≤ R_p            ∀ p ∈ 𝓟
+```
+
+### 2️⃣ Generator Output Bounds
+```
+G_g^min ≤ G_g ≤ G_g^max     ∀ g ∈ 𝓖
+```
+
+### 3️⃣ Power Balance (Lossless Approximation)
+```
+Σ_{g∈𝓖} (G_g − G_g^init) = 0
+```
+
+### 4️⃣ Thermal Safety (Absolute-Value Linearization)
+For every monitored line:
+```
+|F_ℓ| ≤ F_ℓ^max − m         ∀ ℓ ∈ ℒ
+```
+
+This is enforced using two linear inequalities:
+```
+ F_ℓ ≤ F_ℓ^max − m          ∀ ℓ ∈ ℒ
+−F_ℓ ≤ F_ℓ^max − m          ∀ ℓ ∈ ℒ
+```
+
+---
+
+## ▶️ How to Run
 
 ```bash
-python -m pip install -r requirements.txt
+pip install -r requirements.txt
 python solve_pulp.py
 python plot_results.py
 ```
 
-Plots are saved to `results/`.
+---
+
+## 📦 Requirements
+
+```
+pulp>=2.7
+matplotlib>=3.7
+```
 
 ---
 
-## License
-MIT
+## 👤 Author
+
+**Huseyin Ugur Yildiz**

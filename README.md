@@ -2,16 +2,6 @@
 
 This repository implements a **Mixed-Integer Linear Programming (MILP)** model for **max–min thermal margin optimization** in a transmission network using **linear sensitivity factors**.
 
-The project is designed to be:
-- cleanly structured  
-- easy to reproduce  
-- suitable for GitHub portfolios  
-
-It also includes plotting utilities to compare:
-- Base vs Optimized **margins**
-- Base vs Optimized **|flow| vs thermal limits**
-- Base vs Optimized **control actions** (PST taps and generator outputs)
-
 ---
 
 ## 📁 Repository Structure

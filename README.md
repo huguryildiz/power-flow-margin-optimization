@@ -1,4 +1,4 @@
-# Synthetic Flow Margin Optimization (MILP + PuLP) — v3
+# Synthetic Flow Margin Optimization
 
 This repository provides a **fully synthetic** mixed-integer linear programming (MILP) model
 for **maximizing the minimum thermal margin** across a set of critical network elements (lines).
@@ -10,7 +10,7 @@ It also includes a small plotting utility that produces interview-friendly figur
 
 ---
 
-## 1) Problem Description (Story)
+## 1) Problem Description
 
 A transmission operator monitors several **critical network elements (CNEs)** that must stay within thermal limits.
 The operator can influence line flows using:
